@@ -322,6 +322,121 @@ docker {
 }
 ----
 
+== Docker Build Type plugin
+
+The plugin `com.bmuschko.docker-build-type` is a highly opinonated plugin for projects who wish to make use of the gradle docker plugin with a higher
+level of abstraction around common tasks.
+
+[source,groovy]
+----
+apply plugin: 'com.bmuschko.docker-build-type'
+----
+
+
+=== Extension properties
+
+The plugin defines the following properties in the `dockerBuild` extension:
+
+[source,groovy]
+----
+dockerBuild {
+    images {
+        main {
+            imageName = "my-image"
+            imageTag = version
+        }
+        quay {
+            location = "quay.io/pega"
+            imageName = "my-image"
+            imageTag = version
+        }
+    }
+}
+----
+
+
+=== createDockerFile
+
+You will need to implement a function in your project called createDockerFile. This function will be called before building
+the docker image in order to have a working dockerfile to build.
+
+[source,groovy]
+----
+createDockerFile {
+    dependsOn copyRunTemplate
+    from "my-image:1.0"
+
+    runCommand "mkdir /output/"
+
+    copyFile "docker-entrypoint.sh", "/run/"
+
+    entryPoint "docker-entrypoint.sh"
+
+    defaultCommand "run"
+}
+----
+
+
+=== Available tasks
+
+For the example above the following tasks would be created in your project
+
+Docker tasks
+------------
+buildImage
+    copyDockerSource
+    copyToDockerLib
+    createDockerFile
+buildImageQuay
+    copyDockerSource
+    copyToLib
+    createDockerFile
+inspectImage
+inspectImageQuay
+publish [buildImage]
+publishQuay [buildImageQuay]
+removeImage
+removeImageQuay
+
+As you can see "main" is again a special case, all other images get a suffix after the task. e.g publish vs publishQuay
+
+=== src/main/docker
+
+One common action you may need to do while creating a docker image is to add files to the image when building. In gradle the files
+you want to add should live in the same path as where the dockerfile generation is taking place($buildDir/docker usually).
+
+
+A task is created called copyDockerSource. The purpose of this task is to take anything in the src/main/docker directory of
+your project and move it to this docker build folder by use in the dockerfile creation process.
+
+=== dockerLibs configuration
+
+The dockerLibs configuration gives you access to a gradle configuration to store dependencies which can then later be accessed by the
+dockerfile creation process.
+
+[source,groovy]
+----
+dependencies {
+    dockerLibs 'commons-codec:commons-codec:1.9'
+    dockerLibs "org.postgresql:postgresql:9.3-1102-jdbc4"
+}
+----
+
+The above will add the commons-codec and postgresql jar files to the dockerLibs configuration. Another task named copyToDockerLib
+is provided which will again copy anything in this configuration to the $build/docker/libs directory
+
+=== Example
+
+In order to tie this all together you could add the following to your build:
+
+[source,groovy]
+----
+clean.dependsOn("removeImage","removeImageQuay")
+build.dependsOn("buildImage", "buildImageQuay")
+----
+
+When "gradle build" is run, the main and quay docker images will also build.
+When "gradle clean" is run, the main and quay remove images tasks will run.
 == FAQ
 
 === Executing the plugin's test suite with custom configuration
@@ -344,3 +459,5 @@ The following usage example demonstrates running the tests against a Docker inst
 ----
 ./gradlew build -DdockerServerUrl=https://192.168.59.103:2376 -DdockerCertPath=/Users/ben/.boot2docker/certs/boot2docker-vm
 ----
+
+
